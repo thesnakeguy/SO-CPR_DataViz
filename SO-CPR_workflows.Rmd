@@ -1,0 +1,497 @@
+---
+title: "Southern Ocean Krill Biodiversity Analysis"
+author: "Pablo Deschepper"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    self_contained: true
+    browser: true
+---
+
+# Project Description
+
+This document analyzes krill biodiversity data from the Southern Ocean Continuous Plankton Recorder (SO-CPR) program. The analysis includes:
+
+- Biodiversity indices calculation (Richness, Shannon, Simpson, ES50)
+- Spatial visualization of biodiversity patterns
+- Taxonomic occurrence tables
+- Temporal abundance trends
+- Latitudinal abundance patterns
+- Species-specific distribution mapping
+
+The analysis is modular and filters can be applied prior to fit specific visualization needs
+
+
+# 1. Environment Setup
+## 1.1 Package Installation and Loading
+We first install and load all required packages. The code checks for missing packages and installs them automatically.
+
+```{r Install and Load libraries, include=TRUE}
+# document settings
+knitr::opts_chunk$set(
+	fig.align = "center",
+	message = FALSE,
+	warning = FALSE,
+	cache = FALSE,
+	include = FALSE
+)
+# Function to check and install CRAN packages if not already installed
+install_if_missing <- function(packages) {
+  for (pkg in packages) {
+    if (!requireNamespace(pkg, quietly = TRUE)) {
+      install.packages(pkg, dependencies = TRUE)
+    }
+    library(pkg, character.only = TRUE)
+  }
+}
+
+# Install and load CRAN packages
+cran_packages <- c("tidyverse", "sf", "leaflet", "viridis", "reactable", 
+                   "ggplot2", "worrms", "dplyr", "tidyr", "stringr", "mgcv", "fields",
+                   "rnaturalearth", "rnaturalearthdata")
+install_if_missing(cran_packages)
+
+# Install and load GitHub packages if not already installed
+if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")
+if (!requireNamespace("h3", quietly = TRUE)) remotes::install_github("crazycapivara/h3-r")
+if (!requireNamespace("SOmap", quietly = TRUE)) remotes::install_github("AustralianAntarcticDivision/SOmap")
+
+# Load GitHub packages
+library(h3)
+library(SOmap)
+
+# Load additional libraries
+library(blueant)
+```
+
+## 1.2 Analysis Parameters
+Set global parameters for the biodiversity analysis. These can be modified to change the analysis scope.
+
+```{r Analysis Parameters, include = TRUE}
+# Spatial resolution for H3 hexagons to plot the spatial biodiversity (1-15, higher = finer)
+res = 3
+
+# Temporal and ship code filters (NULL = no filter)
+Month_select = NULL       # c("January", "February", ...)
+Ship_code_select = NULL   # Ship codes to include
+Year_select = NULL       # Years to include
+Season_select = NULL     # Seasons to include
+
+# Taxonomic filters (NULL = no filter)
+Taxon = "Clausocalanus" # Regex pattern to filter taxonomy
+
+# Define the bounding box ranges for Longitude and Latitude 
+# Disclaimer: The bounding box is applied as an extra filter to generate a table with abundances of every species of/within the selected taxon and temporal trends. Set the bounding box values to NULL in order to avoid spatial filtering.
+xmin <- NULL   
+xmax <- NULL   
+ymin <- NULL   
+ymax <- NULL   
+```
+
+# 2. Data Preparation
+## 2.1 Load CPR Krill Data
+Data is loaded from the BlueAnt repository containing SO-CPR data.
+
+```{r Load CPR Krill Data, include = TRUE}
+## Read CPR Krill data using BlueAnt ####
+# Configure data folder
+cpr_krill_folder <- "C:/Users/pdeschepper/Desktop/ADVANCE/VRI/Rcode/Krill_Rshiny/SO-CPR_RawData_BlueAnt/"
+cpr_krill <- bb_config(local_file_root = cpr_krill_folder)
+
+# Select and add CPR krill dataset from BlueAnt
+SO_plankton <- sources("Southern Ocean Continuous Plankton Recorder")
+cpr_krill <- cpr_krill %>% bb_add(SO_plankton)
+
+# Synchronize/download the dataset
+status <- bb_sync(cpr_krill)
+
+# Load the CPR data
+myfiles <- status$files[[1]]
+cpr_data_input <- read.csv(myfiles$file[grepl("AADC", myfiles$file)])
+
+# Column names of metadata and plankton species
+colnames_metadata <- c("Tow_Number", "Ship_Code", "Time", "Date", 
+                       "Month", "Year", "Season", "Latitude", 
+                       "Longitude", "Segment_No.", "Segment_Length", 
+                       "Total.abundance", "Phytoplankton_Colour_Index", 
+                       "Fluorescence", "Salinity", "Water_Temperature", 
+                       "Photosynthetically_Active_Radiation")
+colnames_species <- setdiff(colnames(cpr_data_input), colnames_metadata)
+```
+
+## 2.2 Load Taxonomic Metadata
+Load hierarchical taxonomic classification for species IDs. The classification dataset was made with the SO_CPR_AnnotateSpeciesTaxonomy.R script. Change the file path accordingly.
+
+```{r Load Taxonomic Metadata, include = TRUE}
+## Read taxonomic metadata for every ID ####
+taxonomy <- read.table(
+  file = "C:/Users/pdeschepper/Desktop/ADVANCE/VRI/Rcode/Krill_Rshiny/SO-CPR_ID_TaxonAnnotations.txt",
+  sep = "\t", 
+  header = TRUE
+)
+```
+
+## 2.3 Apply Filters
+Filter data based on specified parameters.
+
+```{r Apply Filters, include = TRUE}
+## Apply filters only if the arguments are not NULL ####
+
+# Filter based on taxonomy
+taxonomy_keep <- taxonomy
+
+if (!is.null(Taxon)) {
+  taxonomy_keep <- taxonomy_keep %>%
+    filter(
+      grepl(Taxon, species, ignore.case = TRUE) |
+        grepl(Taxon, genus, ignore.case = TRUE) |
+        grepl(Taxon, family, ignore.case = TRUE) |
+        grepl(Taxon, suborder, ignore.case = TRUE) |
+        grepl(Taxon, order, ignore.case = TRUE) |
+        grepl(Taxon, subclass, ignore.case = TRUE) |
+        grepl(Taxon, class, ignore.case = TRUE) |
+        grepl(Taxon, subphylum, ignore.case = TRUE) |
+        grepl(Taxon, phylum, ignore.case = TRUE) |
+        grepl(Taxon, infrakingdom, ignore.case = TRUE) |
+        grepl(Taxon, subkingdom, ignore.case = TRUE) |
+        grepl(Taxon, kingdom, ignore.case = TRUE)
+    )
+}
+
+selected_columns_IDs <- taxonomy_keep$ID
+
+# Subset cpr_data_input using the selected taxon
+cpr_data_taxons_filtered <- cpr_data_input %>%
+  dplyr::select(all_of(c(selected_columns_IDs, colnames_metadata)))
+
+# Filter the data with additional arguments (month, ship code,...)
+cpr_data_filtered <- cpr_data_taxons_filtered %>%
+  filter(
+    if (!is.null(Month_select)) Month %in% Month_select else TRUE
+  ) %>%
+  filter(
+    if (!is.null(Ship_code_select)) Ship_code %in% Ship_code_select else TRUE
+  ) %>%
+  filter(
+    if (!is.null(Year_select)) Year %in% Year_select else TRUE
+  ) %>%
+  filter(
+    if (!is.null(Season_select)) Season %in% Season_select else TRUE
+  )
+
+# Add an extra column "Taxon.abundance" to represent the abundance of the selected taxon for each row.
+cpr_data_taxons_filtered <- cpr_data_taxons_filtered %>%
+  mutate(Taxon.abundance = rowSums(dplyr::select(., all_of(selected_columns_IDs)), na.rm = TRUE)) %>%
+  filter(Taxon.abundance > 0)
+
+# Filter data based on bounding box
+if (!is.null(xmin) & !is.null(xmax) & !is.null(ymin) & !is.null(ymax)) {
+  cpr_data_bbox <- cpr_data_taxons_filtered %>%
+    filter(Longitude >= xmin & Longitude <= xmax,
+           Latitude >= ymin & Latitude <= ymax)
+} else {
+  cpr_data_bbox <- cpr_data_taxons_filtered
+}
+
+# Show filtered data dimensions
+dim(cpr_data_bbox)
+```
+
+# 3. Biodiversity Analysis
+## 3.1 Calculate Biodiversity Indices
+We calculate several biodiversity metrics at the H3 hexagon level:
+
+- Species Richness
+- Shannon Diversity Index
+- Simpson Diversity Index
+- ES50 (Hurlbert's Expected Species)
+
+```{r Calculate Biodiversity Indices, echo=FALSE}
+# Prepare data with H3 spatial indexing
+resolution = res
+cpr_data <- cpr_data_filtered %>% 
+  mutate(Longitude = Longitude, Latitude = Latitude) %>%
+  st_as_sf(coords = c("Longitude", "Latitude")) %>%
+  mutate(cell = geo_to_h3(., res = resolution))
+cpr_data$Longitude <- cpr_data_filtered$Longitude
+cpr_data$Latitude <- cpr_data_filtered$Latitude
+
+# Function to calculate Shannon Diversity
+shannon_diversity <- function(species_data) {
+  species_abundances <- species_data[species_data > 0]
+  if (length(species_abundances) == 0) return(0)
+  p_i <- species_abundances / sum(species_abundances)
+  H <- -sum(p_i * log(p_i))
+  return(H)
+}
+
+# Function to calculate Simpson Diversity
+simpson_diversity <- function(species_data) {
+  species_abundances <- species_data[species_data > 0]
+  if (length(species_abundances) == 0) return(0)
+  p_i <- species_abundances / sum(species_abundances)
+  return(1 - sum(p_i^2))
+}
+
+# Function to calculate the ES50 (Hurlbert's index)
+calculate_es50 <- function(species_counts) {
+  n <- sum(species_counts)
+  if (n < 50) return(NA)
+  
+  species_present <- species_counts[species_counts > 0]
+  
+  es_values <- sapply(species_present, function(ni) {
+    if ((n - ni) >= 50) {
+      return(1 - exp(lgamma(n - ni + 1) + lgamma(n - 50 + 1) - lgamma(n - ni - 50 + 1) - lgamma(n + 1)))
+    } else {
+      return(1)
+    }
+  })
+  
+  return(sum(es_values, na.rm = TRUE))
+}
+
+# Calculate biodiversity metrics per hexagon cell
+cpr_richness <- cpr_data %>%
+  group_by(cell) %>%
+  summarise(
+    survey_effort = n(),
+    across(all_of(selected_columns_IDs), ~ sum(. >= 1))
+  ) %>%
+  na.omit() %>%
+  data.frame()
+
+# Add diversity metrics
+cpr_richness$shannon_diversity <- apply(cpr_richness[, which(names(cpr_richness) %in% selected_columns_IDs)], 1, shannon_diversity)
+cpr_richness$simpson_diversity <- apply(cpr_richness[, which(names(cpr_richness) %in% selected_columns_IDs)], 1, simpson_diversity)
+cpr_richness$richness <- apply(cpr_richness[, which(names(cpr_richness) %in% selected_columns_IDs)], 1, function(x) sum(x > 0))
+cpr_richness <- cpr_richness %>% 
+  mutate(shannon_diversity_corr = shannon_diversity/survey_effort,
+         simpson_diversity_corr = simpson_diversity/survey_effort,
+         richness_corr = richness/survey_effort)
+cpr_richness$ES50 <- apply(cpr_richness[, which(names(cpr_richness) %in% selected_columns_IDs)], 1, calculate_es50)
+```
+
+# 4. Visualization
+## 4.1 Spatial Biodiversity Patterns
+Visualize biodiversity metrics across the Southern Ocean.
+
+```{r Spatial Biodiversity Patterns, include = TRUE}
+# Convert H3 cells to polygons for visualization
+polygons_richness <- h3_to_geo_boundary_sf(cpr_richness$cell) %>%
+  dplyr::mutate(cell = cpr_richness$cell,
+                survey_effort = cpr_richness$survey_effort,
+                richness = cpr_richness$richness,
+                shannon_diversity = cpr_richness$shannon_diversity,
+                simpson_diversity = cpr_richness$simpson_diversity,
+                richness_corr = cpr_richness$richness_corr,
+                shannon_diversity_corr = cpr_richness$shannon_diversity_corr,
+                simpson_diversity_corr = cpr_richness$simpson_diversity_corr,
+                ES50 = cpr_richness$ES50)
+
+# Reproject to Antarctic South Polar Stereographic (EPSG 3031)
+polygons_richness <- st_transform(polygons_richness, crs = 3031)
+
+# Define richness type and gradient size
+Richness_type <- "ES50"
+gradient.size <- 100
+
+# Generate colors based on values
+richness_values <- polygons_richness[[Richness_type]]
+color_palette <- viridis(gradient.size)
+color_breaks <- cut(as.numeric(richness_values), gradient.size, labels = FALSE)
+
+# Plot SOmap as the base layer
+SOmap(trim = -35, graticules = FALSE, ice = TRUE)
+
+# Overlay polygons with color mapping
+plot(st_geometry(polygons_richness), 
+     col = color_palette[color_breaks], 
+     add = TRUE, 
+     border = "gray")
+
+# Add legend
+legend_titles <- list(
+  "richness" = "Species Richness",
+  "shannon_diversity" = "Shannon Diversity",
+  "simpson_diversity" = "Simpson Diversity",
+  "richness_corr" = "Species Richness (corrected)",
+  "shannon_diversity_corr" = "Shannon Diversity (corrected)",
+  "simpson_diversity_corr" = "Simpson Diversity (corrected)",
+  "ES50" = "ES50 (Hurlbert index)"
+)
+legend_label <- legend_titles[[Richness_type]]                      
+image.plot(
+  legend.only = TRUE,
+  col = color_palette,
+  zlim = range(richness_values, na.rm = TRUE),
+  legend.lab = legend_label
+)
+```
+
+## 4.2 Species Occurrence Table
+Interactive table showing species occurrences in a specified bounding box.
+
+```{r Species Occurrence Table, include = TRUE}
+
+# Create species occurrence table
+cpr_data_bbox_ID <- cpr_data_bbox[, which(colnames(cpr_data_bbox) %in% c(selected_columns_IDs))]
+species_presence <- colSums(cpr_data_bbox_ID) %>% na.omit() %>% .[.>0] %>% sort(decreasing = TRUE)
+species_table <- data.frame(Species = names(species_presence), Abundance = as.numeric(species_presence))
+
+# Interactive table
+reactable(species_table, 
+          columns = list(
+            Species = colDef(name = "Species", width = 150),
+            Abundance = colDef(name = "Abundance", format = colFormat(separators = TRUE))
+          ),
+          bordered = TRUE, striped = TRUE, highlight = TRUE,
+          defaultPageSize = 10)
+```
+
+## 4.3 Temporal Trends
+Plot annual abundance patterns for selected taxa.
+
+```{r Temporal Trends, include = TRUE}
+# Prepare yearly data
+cpr_data_bbox_ID.Year <- cpr_data_bbox[, which(colnames(cpr_data_bbox) %in% c(selected_columns_IDs, "Year"))]
+
+year_counts <- cpr_data_bbox_ID.Year %>%
+  count(Year, name = "Yearly_Surveys")
+
+species_presence_yearly <- cpr_data_bbox_ID.Year %>%
+  group_by(Year) %>%
+  summarise(across(where(is.numeric), sum, na.rm = TRUE)) %>%
+  pivot_longer(-Year, names_to = "Species", values_to = "Abundance") %>%
+  filter(Abundance > 0) %>%
+  arrange(Year, desc(Abundance)) %>%
+  left_join(year_counts, by = "Year") %>%
+  mutate(Corrected_Abundance = Abundance / Yearly_Surveys)
+
+total_abundance_yearly <- species_presence_yearly %>%
+  group_by(Year) %>%
+  summarise(Total_Abundance = sum(Abundance),
+            Yearly_Surveys = sum(Yearly_Surveys),
+            Total_Corrected_Abundance = sum(Corrected_Abundance))
+
+# Plot corrected abundance per species
+ggplot(species_presence_yearly, aes(x = Year, y = Corrected_Abundance, group = Species, color = Species)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Yearly Corrected Abundance of Species",
+       x = "Year",
+       y = "Abundance (Corrected for Sampling Effort)",
+       color = "Species") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+# Plot total abundance trends
+ggplot(total_abundance_yearly, aes(x = Year)) +
+  geom_line(aes(y = Total_Abundance, color = "Uncorrected"), linewidth = 1) +
+  geom_point(aes(y = Total_Abundance, color = "Uncorrected"), size = 2) +
+  geom_line(aes(y = Total_Corrected_Abundance, color = "Corrected"), linewidth = 1, linetype = "dashed") +
+  geom_point(aes(y = Total_Corrected_Abundance, color = "Corrected"), size = 2) +
+  geom_line(aes(y = Yearly_Surveys, color = "lightgrey")) +
+  scale_color_manual(values = c("Uncorrected" = "blue", "Corrected" = "red")) +
+  labs(title = "Total Annual Abundance (Corrected vs. Uncorrected)",
+       x = "Year",
+       y = "Total Abundance",
+       color = "Abundance Type") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+## 4.4 Monthly Abundance Patterns
+Boxplot showing monthly variation in total abundance.
+
+```{r Monthly Abundance Patterns, include = TRUE}
+# Ensure Month is ordered correctly
+cpr_data_bbox$Month <- factor(cpr_data_bbox$Month, 
+                                        levels = month.name)
+# Calculate taxon total abundance for each row
+cpr_data_bbox <- cpr_data_bbox %>%
+  mutate(Taxon.abundance = rowSums(dplyr::select(., all_of(selected_columns_IDs)), na.rm = TRUE)) %>%
+  filter(Taxon.abundance > 0)
+
+ggplot(cpr_data_bbox, aes(x = Month, y = Taxon.abundance)) +
+  geom_boxplot(fill = "lightblue", color = "black", outlier.colour = "darkgrey", outlier.size = 0.5) +
+  labs(title = "Total Abundance per Month",
+       x = "Month",
+       y = "Total Abundance per five mile segment") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylim(0, max(cpr_data_bbox$Taxon.abundance) * 1.05)
+```
+
+## 4.5 Latitudinal Patterns
+GAM smooth of abundance along latitude.
+
+```{r Latitudinal Patterns, include = TRUE}
+
+# Fit GAM model
+gam_model <- gam(Taxon.abundance ~ s(Latitude), data = cpr_data_taxons_filtered)
+
+# Plot with GAM smooth
+ggplot(cpr_data_taxons_filtered, aes(x = Latitude, y = Taxon.abundance)) +
+  geom_point(color = "blue", size = 2, alpha = 0.7) + 
+  geom_smooth(method = "gam", formula = y ~ s(x), color = "red", se = TRUE, linetype = "dashed") +
+  labs(title = "Latitudinal occurence",
+       subtitle = "Using a Generalized Additive Model",
+       x = "Latitude",
+       y = "Total Abundance per five mile segment") +
+  theme_minimal(base_size = 15) +  
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 20),
+        plot.subtitle = element_text(hjust = 0.5, size = 15)) +  
+  ylim(0, max(cpr_data_bbox$Taxon.abundance) * 1.05)
+```
+
+## 4.6 Species Occurrence Map
+Spatial distribution of a selected species.
+
+```{r Species Distribution Map, include = TRUE}
+
+# Prepare presence data
+presence_data <- cpr_data_taxons_filtered %>%
+  mutate(
+    Longitude = as.numeric(Longitude),
+    Latitude = as.numeric(Latitude)
+  ) %>%
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>%
+  st_transform(crs = 3031)
+
+# Prepare background data
+background_data <- cpr_data_input %>%
+  dplyr::select(Longitude, Latitude) %>%
+  mutate(
+    Longitude = as.numeric(Longitude),
+    Latitude = as.numeric(Latitude)
+  ) %>%
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>%
+  st_transform(crs = 3031)
+
+# Get land data
+land <- ne_countries(scale = "medium", returnclass = "sf") %>%
+  st_transform(crs = 3031)
+
+# Plot distribution
+ggplot() +
+  geom_sf(data = land, fill = "grey90", color = "black", size = 0.3) +
+  geom_sf(data = background_data, color = "grey", size = 0.5, alpha = 0.2) +
+  geom_sf(data = presence_data, aes(size = Taxon.abundance), color = "blue", alpha = 0.1) +
+  scale_size_continuous(name = "Abundance", range = c(0.5, 4)) +
+  coord_sf(crs = st_crs(3031), ylim = c(-4500000, 4500000), xlim = c(-4500000, 4500000)) +
+  theme_minimal() +
+  labs(
+    title = paste("Presence of", Taxon),
+    subtitle = "Grey lines represent sampling trajectories",
+    x = "", y = ""
+  ) +
+  theme(legend.position = "right")
+```
+
+# 5. Session Information
+
+```{r Session Information, include = TRUE}
+sessionInfo()
+```
