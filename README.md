@@ -3,7 +3,7 @@ This repository contains an RMarkdown script (`SO-CPR_workflows.Rmd`) designed t
 
 **Key Features:**
 
-* **Reproducible Analysis:** The RMarkdown script is designed for reproducibility. All necessary packages are automatically installed if missing, and the code is structured logically. The SO-CPR dataset is loaded in the environment using the BlueAnt R package which allows easy syncing (https://australianantarcticdivision.github.io/blueant/.
+* **Reproducible Analysis:** The RMarkdown script is designed for reproducibility. All necessary packages are automatically installed if missing, and the code is structured logically. The SO-CPR dataset is loaded in the environment using the BlueAnt R package which allows easy syncing (https://australianantarcticdivision.github.io/blueant/).
 * **Well-Annotated Code:** Each code block within the RMarkdown script is clearly commented to explain the purpose and functionality of the code. Meaningful chunk names enhance readability and understanding.
 * **Modular Filtering:** The analysis incorporates flexible filtering options based on month, ship code, year, season, and taxonomic groups. Spatial filtering using a bounding box is also available for specific analyses.
 * **Comprehensive Biodiversity Metrics:** The script calculates key biodiversity indices, including Species Richness, Shannon Diversity Index, Simpson Diversity Index, and ES50 (Hurlbert's Expected Species).
@@ -68,4 +68,4 @@ The use of parameterized inputs and the explicit installation of required packag
 
 ## 5. Further Information
 
-For questions or issues related to this analysis, feel free to contact me @thesnakeguy
+For questions or issues related to this analysis, feel free to contact me @thesnakeguy or post an issue to this repo :)
