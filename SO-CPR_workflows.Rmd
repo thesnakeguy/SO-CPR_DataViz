@@ -95,7 +95,7 @@ Data is loaded from the BlueAnt repository containing SO-CPR data.
 ```{r Load CPR Krill Data, include = TRUE}
 ## Read CPR Krill data using BlueAnt ####
 # Configure data folder
-cpr_krill_folder <- "C:/Users/pdeschepper/Desktop/ADVANCE/VRI/Rcode/Krill_Rshiny/SO-CPR_RawData_BlueAnt/"
+cpr_krill_folder <- "C:/yourpath/SO-CPR_RawData_BlueAnt/"
 cpr_krill <- bb_config(local_file_root = cpr_krill_folder)
 
 # Select and add CPR krill dataset from BlueAnt
@@ -125,7 +125,7 @@ Load hierarchical taxonomic classification for species IDs. The classification d
 ```{r Load Taxonomic Metadata, include = TRUE}
 ## Read taxonomic metadata for every ID ####
 taxonomy <- read.table(
-  file = "C:/Users/pdeschepper/Desktop/ADVANCE/VRI/Rcode/Krill_Rshiny/SO-CPR_ID_TaxonAnnotations.txt",
+  file = "C:/yourpath/SO-CPR_ID_TaxonAnnotations.txt",
   sep = "\t", 
   header = TRUE
 )
