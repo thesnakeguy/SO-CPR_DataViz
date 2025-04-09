@@ -21,7 +21,7 @@ library(tibble)
 ########################################
 
 # Configure data folder
-cpr_krill_folder <- "C:/Users/pdeschepper/Desktop/ADVANCE/VRI/Rcode/Krill_Rshiny/SO-CPR_RawData_BlueAnt"
+cpr_krill_folder <- "C:/yourpath/SO-CPR_RawData_BlueAnt"
 cpr_krill <- bb_config(local_file_root = cpr_krill_folder)
 # Select and add CPR krill dataset from BlueAnt
 SO_plankton <- sources("Southern Ocean Continuous Plankton Recorder")
@@ -240,5 +240,5 @@ taxon_df_merged <- taxon_df_merged[rowSums(!is.na(taxon_df_merged)) > 0, ]
 view(taxon_df_merged, n = Inf)
 
 # Save the dataframe
-setwd("C:/Users/pdeschepper/Desktop/ADVANCE/VRI/Rcode/Krill_Rshiny/")
+setwd("C:/yourpath/SO-CPR_RawData_BlueAnt")
 write.table(taxon_df_merged, "SO-CPR_ID_TaxonAnnotations.txt", quote = FALSE, sep = "\t")
