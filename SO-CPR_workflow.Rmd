@@ -69,8 +69,8 @@ Set global parameters for the biodiversity analysis. These can be modified to ch
 
 ```{r Analysis Parameters, include = TRUE}
 # Choose working directory and location of taxon annotations file created with SO_CPR_AnnotateSpeciesTaxonomy.R script
-workdir = "C:/Users/pdeschepper/Desktop/ADVANCE/VRI/Rcode/Krill_Rshiny/SO-CPR_RawData_BlueAnt/"
-taxon.annotations = "C:/Users/pdeschepper/Desktop/ADVANCE/VRI/Rcode/Krill_Rshiny/SO-CPR_ID_TaxonAnnotations.txt"
+workdir = "C:/yourdir/SO-CPR_RawData_BlueAnt/"
+taxon.annotations = "C:/yourdir/SO-CPR_ID_TaxonAnnotations.txt"
 
 # Spatial resolution for H3 hexagons to plot the spatial biodiversity (1-15, higher = finer)
 res = 3
