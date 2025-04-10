@@ -68,6 +68,10 @@ library(blueant)
 Set global parameters for the biodiversity analysis. These can be modified to change the analysis scope.
 
 ```{r Analysis Parameters, include = TRUE}
+# Choose working directory and location of taxon annotations file created with SO_CPR_AnnotateSpeciesTaxonomy.R script
+workdir = "C:/Users/pdeschepper/Desktop/ADVANCE/VRI/Rcode/Krill_Rshiny/SO-CPR_RawData_BlueAnt/"
+taxon.annotations = "C:/Users/pdeschepper/Desktop/ADVANCE/VRI/Rcode/Krill_Rshiny/SO-CPR_ID_TaxonAnnotations.txt"
+
 # Spatial resolution for H3 hexagons to plot the spatial biodiversity (1-15, higher = finer)
 res = 3
 
@@ -78,7 +82,7 @@ Year_select = NULL       # Years to include
 Season_select = NULL     # Seasons to include
 
 # Taxonomic filters (NULL = no filter)
-Taxon = "Clausocalanus" # Regex pattern to filter taxonomy
+Taxon = "Rotaliida" # Regex pattern to filter taxonomy
 
 # Define the bounding box ranges for Longitude and Latitude 
 # Disclaimer: The bounding box is applied as an extra filter to generate a table with abundances of every species of/within the selected taxon and temporal trends. Set the bounding box values to NULL in order to avoid spatial filtering.
@@ -95,7 +99,7 @@ Data is loaded from the BlueAnt repository containing SO-CPR data.
 ```{r Load CPR Krill Data, include = TRUE}
 ## Read CPR Krill data using BlueAnt ####
 # Configure data folder
-cpr_krill_folder <- "C:/yourpath/SO-CPR_RawData_BlueAnt/"
+cpr_krill_folder <- workdir
 cpr_krill <- bb_config(local_file_root = cpr_krill_folder)
 
 # Select and add CPR krill dataset from BlueAnt
@@ -120,12 +124,12 @@ colnames_species <- setdiff(colnames(cpr_data_input), colnames_metadata)
 ```
 
 ## 2.2 Load Taxonomic Metadata
-Load hierarchical taxonomic classification for species IDs. The classification dataset was made with the SO_CPR_AnnotateSpeciesTaxonomy.R script. Change the file path accordingly.
+Load hierarchical taxonomic classification for species IDs. The classification dataset was made with the SO_CPR_AnnotateSpeciesTaxonomy.R script. 
 
 ```{r Load Taxonomic Metadata, include = TRUE}
 ## Read taxonomic metadata for every ID ####
 taxonomy <- read.table(
-  file = "C:/yourpath/SO-CPR_ID_TaxonAnnotations.txt",
+  file = taxon.annotations,
   sep = "\t", 
   header = TRUE
 )
@@ -350,7 +354,7 @@ reactable(species_table,
 ```
 
 ## 4.3 Temporal Trends
-Plot annual abundance patterns for selected taxa.
+Plot annual abundance patterns for selected taxa in the bounding box.
 
 ```{r Temporal Trends, include = TRUE}
 # Prepare yearly data
@@ -378,7 +382,7 @@ total_abundance_yearly <- species_presence_yearly %>%
 ggplot(species_presence_yearly, aes(x = Year, y = Corrected_Abundance, group = Species, color = Species)) +
   geom_line() +
   geom_point() +
-  labs(title = "Yearly Corrected Abundance of Species",
+  labs(title = "Annual corrected abundance of species",
        x = "Year",
        y = "Abundance (Corrected for Sampling Effort)",
        color = "Species") +
@@ -393,7 +397,7 @@ ggplot(total_abundance_yearly, aes(x = Year)) +
   geom_point(aes(y = Total_Corrected_Abundance, color = "Corrected"), size = 2) +
   geom_line(aes(y = Yearly_Surveys, color = "lightgrey")) +
   scale_color_manual(values = c("Uncorrected" = "blue", "Corrected" = "red")) +
-  labs(title = "Total Annual Abundance (Corrected vs. Uncorrected)",
+  labs(title = "Total annual abundance (Corrected vs. Uncorrected)",
        x = "Year",
        y = "Total Abundance",
        color = "Abundance Type") +
@@ -402,7 +406,7 @@ ggplot(total_abundance_yearly, aes(x = Year)) +
 ```
 
 ## 4.4 Monthly Abundance Patterns
-Boxplot showing monthly variation in total abundance.
+Boxplot showing monthly variation in total abundance in the bounding box.
 
 ```{r Monthly Abundance Patterns, include = TRUE}
 # Ensure Month is ordered correctly
@@ -415,9 +419,9 @@ cpr_data_bbox <- cpr_data_bbox %>%
 
 ggplot(cpr_data_bbox, aes(x = Month, y = Taxon.abundance)) +
   geom_boxplot(fill = "lightblue", color = "black", outlier.colour = "darkgrey", outlier.size = 0.5) +
-  labs(title = "Total Abundance per Month",
+  labs(title = "Total abundance per Month",
        x = "Month",
-       y = "Total Abundance per five mile segment") +
+       y = "Total abundance per five mile segment") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   ylim(0, max(cpr_data_bbox$Taxon.abundance) * 1.05)
@@ -438,7 +442,7 @@ ggplot(cpr_data_taxons_filtered, aes(x = Latitude, y = Taxon.abundance)) +
   labs(title = "Latitudinal occurence",
        subtitle = "Using a Generalized Additive Model",
        x = "Latitude",
-       y = "Total Abundance per five mile segment") +
+       y = "Total abundance per five mile segment") +
   theme_minimal(base_size = 15) +  
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         plot.title = element_text(hjust = 0.5, face = "bold", size = 20),
