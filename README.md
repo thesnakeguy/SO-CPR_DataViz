@@ -14,6 +14,9 @@ This repository contains an RMarkdown script (`SO-CPR_workflows.Rmd`) designed t
     * Monthly abundance patterns displayed as boxplots.
     * Latitudinal abundance patterns visualized with GAM smoothing.
     * Species-specific distribution maps overlaid on the Southern Ocean.
+ 
+![DataViz_examples](https://github.com/user-attachments/assets/df521dfd-ebbd-49dc-ba45-f5a4a6cebf2f)
+
 
 ## 1. Repository Contents
 
